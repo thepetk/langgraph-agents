@@ -338,6 +338,23 @@ class IngestionService:
             # sys.exit(0)
 
 
+def clean_text(text):
+    """clean text to handle encoding issues."""
+    replacements = {
+        "\u2013": "-",
+        "\u2014": "--",
+        "\u2018": "'",
+        "\u2019": "'",
+        "\u201c": '"',
+        "\u201d": '"',
+        "\u2026": "...",
+    }
+    for old, new in replacements.items():
+        text = text.replace(old, new)
+
+    return text.encode("ascii", "ignore").decode("ascii")
+
+
 if __name__ == "__main__":
     config_file = os.getenv("INGESTION_CONFIG", "/config/ingestion-config.yaml")
 
@@ -375,6 +392,10 @@ if __name__ == "__main__":
         break
 
     logger.info(f"Retrieved {len(all_chunks)} total chunks from all vector stores")
+
+    # Query the vector stores (query each one separately)
+    chunks_text = [clean_text(chunk.content) for chunk in all_chunks]
+    context = "\n\n".join(chunks_text)
 
     # Build context from query results
     context = "\n\n".join([chunk.content for chunk in all_chunks])
