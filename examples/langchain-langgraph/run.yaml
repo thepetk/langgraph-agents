@@ -7,6 +7,8 @@ apis:
 - safety
 - tool_runtime
 - vector_io
+- files
+- vector_stores
 
 providers:
   inference:
@@ -14,17 +16,17 @@ providers:
     provider_type: remote::ollama
     config:
       url: ${env.OLLAMA_URL:=http://localhost:11434}
-  - provider_id: vllm
-    provider_type: remote::vllm
-    config:
-      url: ${env.DEV_CLUSTER_QWEN_URL}
-      api_token: ${env.DEV_CLUSTER_QWEN_API_KEY}
-      max_tokens: 4096
-      tsl_verify: false
-  - provider_id: gemini
-    provider_type: remote::gemini
-    config:
-      api_key: ${env.GEMINI_API_KEY:=}
+  # - provider_id: vllm
+  #   provider_type: remote::vllm
+  #   config:
+  #     url: ${env.DEV_CLUSTER_QWEN_URL}
+  #     api_token: ${env.DEV_CLUSTER_QWEN_API_KEY}
+  #     max_tokens: 4096
+  #     tsl_verify: false
+  # - provider_id: gemini
+  #   provider_type: remote::gemini
+  #   config:
+  #     api_key: ${env.GEMINI_API_KEY:=}
   - provider_id: openai
     provider_type: remote::openai
     config:
@@ -39,6 +41,9 @@ providers:
     - provider_id: model-context-protocol
       provider_type: remote::model-context-protocol
       config: {}
+    - provider_id: rag-runtime
+      provider_type: inline::rag-runtime
+      config: {}
   agents:
   - provider_id: meta-reference
     provider_type: inline::meta-reference
@@ -51,12 +56,23 @@ providers:
           backend: sql_default
           table_name: responses
   vector_io:
-  - provider_id: ${env.MILVUS_URL:+milvus}
+  - provider_id: milvus
     provider_type: inline::milvus
     config:
+      db_path: ${env.MILVUS_DB_PATH:=~/.llama/milvus.db}
+      embedding_model: openai/text-embedding-3-small
+      embedding_dimension: 1536
       persistence:
         namespace: milvus
         backend: kv_default
+  files:
+  - provider_id: localfs
+    provider_type: inline::localfs
+    config:
+      storage_dir: ${env.FILES_STORAGE_DIR:=~/.llama/files}
+      metadata_store:
+        backend: sql_default
+        table_name: files
 
 registered_resources:
   models: []
@@ -94,3 +110,9 @@ storage:
 
 server:
   port: 8321
+
+vector_stores:
+  default_provider_id: milvus
+  default_embedding_model:
+    provider_id: openai
+    model_id: text-embedding-3-small

@@ -1,0 +1,79 @@
+# Local Ingestion Pipeline Configuration
+# This configuration defines vector databases to be created during local deployment
+
+# Llama Stack Configuration
+llamastack:
+  base_url: "http://localhost:8321"
+  
+# Vector Database Configuration
+vector_db:
+#  embedding_model: "all-MiniLM-L6-v2"
+  embedding_model: "openai/text-embedding-3-small"
+  embedding_dimension: 384
+  chunk_size_in_tokens: 512
+
+# Pipeline Configurations
+# Each pipeline will create a separate vector database
+pipelines:
+  # HR Documents Pipeline
+  hr-pipeline:
+    enabled: true
+    name: "hr-vector-db"
+    version: "1.0"
+    vector_store_name: "hr-vector-db-v1-0"
+    source: GITHUB  # Options: GITHUB, S3, URL
+    config:
+      url: "https://github.com/rh-ai-quickstart/RAG.git"
+      path: "notebooks/hr"
+      branch: "main"
+      # token: ""  # Optional: GitHub personal access token for private repos
+
+  # Legal Documents Pipeline
+  legal-pipeline:
+    enabled: true
+    name: "legal-vector-db"
+    version: "1.0"
+    vector_store_name: "legal-vector-db-v1-0"
+    source: GITHUB
+    config:
+      url: "https://github.com/rh-ai-quickstart/RAG.git"
+      path: "notebooks/legal"
+      branch: "main"
+
+  # Sales Documents Pipeline
+  sales-pipeline:
+    enabled: true
+    name: "sales-vector-db"
+    version: "1.0"
+    vector_store_name: "sales-vector-db-v1-0"
+    source: GITHUB
+    config:
+      url: "https://github.com/rh-ai-quickstart/RAG.git"
+      path: "notebooks/sales"
+      branch: "main"
+
+  # Procurement Documents Pipeline
+  procurement-pipeline:
+    enabled: true
+    name: "procurement-vector-db"
+    version: "1.0"
+    vector_store_name: "procurement-vector-db-v1-0"
+    source: GITHUB
+    config:
+      url: "https://github.com/rh-ai-quickstart/RAG.git"
+      path: "notebooks/procurement"
+      branch: "main"
+
+  # Tech Support Documents Pipeline
+  techsupport-pipeline:
+    enabled: true
+    name: "techsupport-vector-db"
+    version: "1.0"
+    vector_store_name: "techsupport-vector-db-v1-0"
+    source: GITHUB
+    config:
+      url: "https://github.com/rh-ai-quickstart/RAG.git"
+      path: "notebooks/techsupport"
+      branch: "main"
+
+   
