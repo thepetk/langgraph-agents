@@ -389,7 +389,6 @@ if __name__ == "__main__":
             vector_db_id=vector_db_id, query=user_query, params={"max_chunks": 5}
         )
         all_chunks.extend(query_results.chunks)
-        break
 
     logger.info(f"Retrieved {len(all_chunks)} total chunks from all vector stores")
 
