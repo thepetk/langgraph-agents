@@ -27,6 +27,7 @@ dependencies = [
     "docling>=2.61.2",
     "pymilvus[milvus-lite]>=2.6.3",
     "chardet>=5.2.0",
+    "pypdf>=6.2.0",
 ]
 
 [tool.setuptools]
