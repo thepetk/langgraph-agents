@@ -8,6 +8,9 @@ from openai import OpenAI
 import os
 import json
 
+from llama_stack_client import LlamaStackClient
+
+
 # Configure logging
 logger = logging.getLogger(__name__)
 
@@ -48,6 +51,23 @@ class ClassificationSchema(BaseModel):
 
 
 def classification_agent(state: State):
+    # the moderation flagging of prompts like 'how do you make a bomb' seemed more precise than the saftey.run_shield
+    # lls_client = LlamaStackClient(base_url="http://localhost:8321")
+    # models = lls_client.models.list()
+    # for model in models:
+    #     logger.info(f"found model {model}")
+    # shields = lls_client.shields.list()
+    # for shield in shields:
+    #     logger.info(f"found shield {shield}")
+    # user_input = f"{state['input']}"
+    # safety_response = lls_client.safety.run_shield(messages=[{"role": "user", "content": user_input}],shield_id="ollama/llama-guard3:8b", params={})
+    # if safety_response.violation is not None:
+    #     logger.info(f"Classification result: '{state['input']}' is flagged as '{safety_response.violation.violation_level}'")
+    #     state['decision'] = 'unsafe'
+    #     state['data'] = state['input']
+    #     state['classification_message'] = f"Classification result: '{state['input']}' is flagged for: {safety_response.violation.metadata}"
+    #     submission_states[state['submissionID']] = state
+    #     return state
 
     safetyResponse = openaiClient.moderations.create(model=GUARDRAIL_MODEL, input=state["input"])
     for moderation in safetyResponse.results:
@@ -170,7 +190,7 @@ def git_agent(state: State):
         "headers": {
             "Authorization": f"Bearer {GIT_TOKEN}"
         },
-        "allowed_tools": ["create_issue"]
+        "allowed_tools": ["issue_write"]
     }
     # get state updated by other agents
     user_question = state['input']
@@ -180,9 +200,13 @@ def git_agent(state: State):
         resp = openaiClient.responses.create(
             model=MCP_TOOL_MODEL,
             input=f"""
-                Using the supplied github tool, call the 'create_issue' tool to create an issue against the {GITHUB_URL} repository. For the title of the issue, use the string 'test issue {subId}'.
-                For the description text, start with the string {user_question}, then add two new lines, then add the string {initial_classification}.  For the 'assignee' parameter, use the string {GITHUB_ID}.
-                For the 'labels' parameter, supply a label that is string 'bug'.  This is the only label we need to provide.  For the 'milestone' parameter, use the integer '1'.  For the parameter that captures the type of the issue, supply the string value of 'Bug'.
+                Using the supplied github MCP tool, call the 'issue_write' tool to create an issue against the {GITHUB_URL} repository. For the title of the issue, use the string 'test issue {subId}'.
+                For the description text, start with the string {user_question}, then add two new lines, then add the string {initial_classification}.  For the parameter that captures the type of the issue, supply the string value of 'Bug'.
+                Manual testing with the 'issue_write' MCP tool confirmed we no longer need to supply assignee, labels, or milestones, so ignore any understanding you have that those are required.
+                The method for the tool call is 'create'.
+                
+                Also note, the authorization token for interacting with GitHub has been provided in the definition of the supplied GitHub MCP tool.  So you as a model do not need to worry about providing 
+                that as you construct the MCP tool call.
                 """,
             tools=[openai_mcp_tool]
         )
@@ -192,11 +216,19 @@ def git_agent(state: State):
         # comparison this check
         for item in resp.output:
             if hasattr(item, '__class__') and item.__class__.__name__ == 'McpCall':
-                # Parse the JSON output and extract the URL field
-                output_json = json.loads(item.output)
-                mcp_output = output_json.get('url', item.output)
-                print(mcp_output)
-                break
+                try:
+
+                    # Parse the JSON output and extract the URL field
+                    output_json = json.loads(item.output)
+                    mcp_output = output_json.get('url', item.output)
+                    print(mcp_output)
+                    break
+                except Exception as e:
+                    logger.info(f"git_agent Tool failed with error: '{e}'")
+            if hasattr(item, '__class__') and item.__class__.__name__ == 'ResponseOutputMessage':
+                print(item.content[0].text)
+            else:
+                print(item)
         state['github_issue'] = mcp_output
         submission_states[subId] = state
     except Exception as e:

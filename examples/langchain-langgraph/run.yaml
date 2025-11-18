@@ -16,13 +16,13 @@ providers:
     provider_type: remote::ollama
     config:
       url: ${env.OLLAMA_URL:=http://localhost:11434}
-  # - provider_id: vllm
-  #   provider_type: remote::vllm
-  #   config:
-  #     url: ${env.DEV_CLUSTER_QWEN_URL}
-  #     api_token: ${env.DEV_CLUSTER_QWEN_API_KEY}
-  #     max_tokens: 4096
-  #     tsl_verify: false
+  - provider_id: vllm
+    provider_type: remote::vllm
+    config:
+      url: ${env.DEV_CLUSTER_QWEN_URL}
+      api_token: ${env.DEV_CLUSTER_QWEN_API_KEY}
+      max_tokens: 4096
+      tsl_verify: false
   # - provider_id: gemini
   #   provider_type: remote::gemini
   #   config:
@@ -85,7 +85,9 @@ registered_resources:
   datasets: []
   scoring_fns: []
   benchmarks: []
-  tool_groups: []
+  tool_groups:
+    - provider_id: rag-runtime
+      toolgroup_id: builtin::rag
 
 storage:
   backends:
