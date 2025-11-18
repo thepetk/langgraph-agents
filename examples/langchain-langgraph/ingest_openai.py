@@ -368,9 +368,45 @@ if __name__ == "__main__":
     model = os.getenv("INFERENCE_MODEL", "ollama/llama3.2:3b")
     from datetime import datetime
 
+    current = datetime.now()
+    formatted_datetime_string = current.strftime("%Y-%m-%d %H:%M:%S")
+    logger.info(f"GGM making response call {formatted_datetime_string}")
+    rag_response = service.client.responses.create(
+        model=model,
+        input="using file_search and the documents imported into the vector store, describe the workspaces at FantaCo",
+        tools=[
+            {
+                "type": "file_search",
+                "vector_store_ids": service.vector_store_ids
+            }
+        ]
+    )
+    current = datetime.now()
+    formatted_datetime_string = current.strftime("%Y-%m-%d %H:%M:%S")
+    logger.info(f"GGM returned from response call {formatted_datetime_string}")
+
+    for i, output_item in enumerate(rag_response.output):
+        if len(rag_response.output) > 1:
+            print(f"\n--- Output Item {i + 1} ---")
+        print(f"Output type: {output_item.type}")
+
+        if output_item.type in ("text", "message"):
+            print(f"Response content: {output_item.content[0].text}")
+        elif output_item.type == "file_search_call":
+            print(f"  Tool Call ID: {output_item.id}")
+            print(f"  Tool Status: {output_item.status}")
+            # 'queries' is a list, so we join it for clean printing
+            print(f"  Queries: {', '.join(output_item.queries)}")
+            # Display results if they exist, otherwise note they are empty
+            print(f"  Results: {output_item.results if output_item.results else 'None'}")
+        else:
+            print(f"Response content: {output_item.content}")
+
     # Query vector stores directly
     user_query = "describe the workspaces at FantaCo"
-    logger.info(f"Querying vector stores with: {user_query}")
+    current = datetime.now()
+    formatted_datetime_string = current.strftime("%Y-%m-%d %H:%M:%S")
+    logger.info(f"GGM Querying vector stores at time {formatted_datetime_string} with user query: {user_query}")
 
     # Get vector_db_ids from vector_stores.list()
     vector_stores = service.client.vector_stores.list() or []
@@ -409,7 +445,7 @@ Please answer the question based on the context provided above."""
 
     current = datetime.now()
     formatted_datetime_string = current.strftime("%Y-%m-%d %H:%M:%S")
-    logger.info(f"GGM making response call {formatted_datetime_string}")
+    logger.info(f"GGM making vector io response call {formatted_datetime_string}")
 
     rag_response = service.client.responses.create(
         model=model,
@@ -418,7 +454,7 @@ Please answer the question based on the context provided above."""
 
     current = datetime.now()
     formatted_datetime_string = current.strftime("%Y-%m-%d %H:%M:%S")
-    logger.info(f"GGM returned from response call {formatted_datetime_string}")
+    logger.info(f"GGM returned from vector io response call {formatted_datetime_string}")
 
     for i, output_item in enumerate(rag_response.output):
         if len(rag_response.output) > 1:
