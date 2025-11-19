@@ -1192,7 +1192,6 @@ dependencies = [
     { name = "langgraph" },
     { name = "litellm" },
     { name = "llama-stack" },
-    { name = "llama-stack-client" },
     { name = "mcp" },
     { name = "mcp-server-git" },
     { name = "ollama" },
@@ -1219,7 +1218,6 @@ requires-dist = [
     { name = "langgraph", specifier = "==1.0.0" },
     { name = "litellm", specifier = "==1.77.7" },
     { name = "llama-stack", specifier = "==0.3.1" },
-    { name = "llama-stack-client", git = "https://github.com/llamastack/llama-stack-client-python?rev=526a42aa347592e27f57f78ef07aae3cf1997ceb" },
     { name = "mcp", specifier = "==1.14.1" },
     { name = "mcp-server-git", specifier = "==2025.9.25" },
     { name = "ollama", specifier = "==0.6.0" },
@@ -1428,8 +1426,8 @@ wheels = [
 
 [[package]]
 name = "llama-stack-client"
-version = "0.4.0a5"
-source = { git = "https://github.com/llamastack/llama-stack-client-python?rev=526a42aa347592e27f57f78ef07aae3cf1997ceb#526a42aa347592e27f57f78ef07aae3cf1997ceb" }
+version = "0.3.2"
+source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "anyio" },
     { name = "click" },
@@ -1446,6 +1444,10 @@ dependencies = [
     { name = "termcolor" },
     { name = "tqdm" },
     { name = "typing-extensions" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/b5/3f/e7287898d5096066549cbe473a6177667d3fde78f30bb4c4009686693d35/llama_stack_client-0.3.2.tar.gz", hash = "sha256:6ad5e07d827d1b605110de49d66a7138112366e0d91a980939e10c2011c15671", size = 340439, upload-time = "2025-11-12T23:18:37.303Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/be/c6/93db0d154ad1de1d96b615007cdab7d25709ed5425e203c64b04435b1ee7/llama_stack_client-0.3.2-py3-none-any.whl", hash = "sha256:a0143759ceba20c671bb60d95bdec71c987a90f9348d0ae16644c37a165678ae", size = 425234, upload-time = "2025-11-12T23:18:35.156Z" },
 ]
 
 [[package]]

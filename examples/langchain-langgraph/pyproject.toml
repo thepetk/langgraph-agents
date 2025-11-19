@@ -6,7 +6,7 @@ readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
     "llama-stack==0.3.1",
-    "llama-stack-client @ git+https://github.com/llamastack/llama-stack-client-python@526a42aa347592e27f57f78ef07aae3cf1997ceb",
+    #"llama-stack-client @ git+https://github.com/llamastack/llama-stack-client-python@526a42aa347592e27f57f78ef07aae3cf1997ceb",
     "mcp==1.14.1",
     "ollama==0.6.0",
     "openai==1.109.1",
