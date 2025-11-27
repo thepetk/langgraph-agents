@@ -52,6 +52,9 @@ class IngestionService:
 
         # Vector DB configuration
         self.vector_db_config = self.config["vector_db"]
+        
+        # File metadata mapping: file_id -> {original_filename, github_url, category}
+        self.file_metadata = {}
 
         # Document converter setup
         pipeline_options = PdfPipelineOptions()
@@ -173,8 +176,14 @@ class IngestionService:
         logger.info(f"Downloaded {len(pdf_files)} PDF files from URLs")
         return pdf_files
 
-    def process_documents(self, pdf_files: List[str]) -> List[File]:
-        """Process PDF files into chunks using docling."""
+    def process_documents(self, pdf_files: List[str], github_base_url: str = "", category: str = "") -> List[File]:
+        """Process PDF files into chunks using docling.
+        
+        Args:
+            pdf_files: List of local PDF file paths
+            github_base_url: GitHub blob URL base for constructing source links
+            category: Category name (e.g., 'legal', 'support') for metadata
+        """
         logger.info(f"Processing {len(pdf_files)} documents with docling...")
 
         llama_documents = []
@@ -182,16 +191,29 @@ class IngestionService:
 
         for file_path in pdf_files:
             try:
-                logger.info(f"Processing: {os.path.basename(file_path)}")
+                original_filename = os.path.basename(file_path)
+                logger.info(f"Processing: {original_filename}")
 
                 file_create_response = self.client.files.create(
                     file=Path(file_path), purpose="assistants"
                 )
                 llama_documents.append(file_create_response)
+                
+                # Store metadata mapping file_id to original filename and GitHub URL
+                file_id = file_create_response.id
+                github_url = f"{github_base_url}/{original_filename}" if github_base_url else ""
+                
+                self.file_metadata[file_id] = {
+                    "original_filename": original_filename,
+                    "github_url": github_url,
+                    "category": category
+                }
+                logger.info(f"Mapped file_id '{file_id}' -> '{original_filename}'")
+                
             except Exception as e:
                 logger.error(f"Error processing {file_path}: {e}")
 
-        logger.info(f"Total chunks created: {len(llama_documents)}")
+        logger.info(f"Total files processed: {len(llama_documents)}")
         return llama_documents
 
     def get_provider_id(self) -> str:
@@ -259,6 +281,17 @@ class IngestionService:
         vector_store_name = pipeline_config["vector_store_name"]
         source = pipeline_config["source"]
         source_config = pipeline_config["config"]
+        
+        # Extract category from vector store name (e.g., "legal-vector-db-v1-0" -> "legal")
+        category = vector_store_name.split('-')[0] if vector_store_name else pipeline_name
+        
+        # Construct GitHub base URL for source references
+        github_base_url = ""
+        if source == "GITHUB":
+            github_url = source_config.get('url', '').rstrip('.git').rstrip('/')
+            branch = source_config.get('branch', 'main')
+            path = source_config.get('path', '')
+            github_base_url = f"{github_url}/blob/{branch}/{path}".rstrip('/')
 
         # Create temporary directory for this pipeline
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -277,8 +310,8 @@ class IngestionService:
                 logger.warning(f"No PDF files found for pipeline '{pipeline_name}'")
                 return False
 
-            # Process documents
-            documents = self.process_documents(pdf_files)
+            # Process documents with metadata for source tracking
+            documents = self.process_documents(pdf_files, github_base_url, category)
 
             if not documents:
                 logger.warning(f"No documents processed for pipeline '{pipeline_name}'")
@@ -336,6 +369,24 @@ class IngestionService:
         else:
             logger.info("All pipelines completed successfully!")
             # sys.exit(0)
+        
+        # Save file metadata for RAG source references
+        self.save_file_metadata()
+    
+    def save_file_metadata(self, output_path: str = "rag_file_metadata.json"):
+        """Save file metadata mapping to JSON for use by RAG service."""
+        import json
+        
+        if not self.file_metadata:
+            logger.warning("No file metadata to save")
+            return
+        
+        try:
+            with open(output_path, 'w') as f:
+                json.dump(self.file_metadata, f, indent=2)
+            logger.info(f"Saved file metadata for {len(self.file_metadata)} files to {output_path}")
+        except Exception as e:
+            logger.error(f"Failed to save file metadata: {e}")
 
 
 def clean_text(text):
