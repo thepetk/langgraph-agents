@@ -1,6 +1,6 @@
 import logging
 
-from flask import Flask, request, send_from_directory
+from flask import Flask, request, send_from_directory, jsonify
 from langchain.chat_models import init_chat_model
 from openai import OpenAI
 import os
@@ -9,6 +9,7 @@ import asyncio
 import threading
 import uuid
 from workflow import make_workflow, submission_states
+from rag_service import RAGService
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -38,6 +39,20 @@ llm = init_chat_model(
 # private attribute; so we open up a separate openai client for moderations
 openaiClient = OpenAI(api_key=API_KEY, base_url=INFERENCE_SERVER_OPENAI)
 
+# Initialize RAG service to access vector stores created by ingest_openai.py
+# The RAG service uses LlamaStackClient to discover vector stores, but RAG queries
+# will use the OpenAI-compatible responses API (same as MCP tool calls)
+LLAMA_STACK_URL = os.getenv("LLAMA_STACK_URL", "http://localhost:8321")
+INGESTION_CONFIG = os.getenv("INGESTION_CONFIG", "ingestion-config.yaml")
+RAG_FILE_METADATA = os.getenv("RAG_FILE_METADATA", "rag_file_metadata.json")
+rag_service = RAGService(
+    llama_stack_url=LLAMA_STACK_URL, 
+    ingestion_config_path=INGESTION_CONFIG,
+    file_metadata_path=RAG_FILE_METADATA
+)
+if not rag_service.initialize():
+    logger.warning("RAG Service initialization failed. RAG features will be disabled.")
+
 workflow = make_workflow(
     llm,
     openaiClient,
@@ -45,7 +60,9 @@ workflow = make_workflow(
     MCP_TOOL_MODEL,
     GIT_TOKEN,
     GITHUB_URL,
-    GITHUB_ID
+    GITHUB_ID,
+    rag_service=rag_service,
+    inference_model=INFERENCE_MODEL
 )
 
 async def invoke_workflow_async(question, submission_id):
@@ -56,7 +73,72 @@ app = Flask(__name__, static_folder='.')
 
 @app.route('/')
 def index():
+    return send_from_directory('.', 'chat.html')
+
+@app.route('/classic')
+def classic_index():
+    """Original multi-page interface"""
     return send_from_directory('.', 'index.html')
+
+@app.route('/api/submit', methods=['POST'])
+def api_submit():
+    """API endpoint to submit a question and get submission ID"""
+    question = request.form.get('question')
+    if not question:
+        return jsonify({'error': 'No question provided'}), 400
+
+    # Generate random submission ID
+    submission_id = str(uuid.uuid4())
+
+    # Process the question using your workflow asynchronously
+    threading.Thread(target=run_async_task, args=(question, submission_id)).start()
+    
+    return jsonify({
+        'submissionId': submission_id,
+        'status': 'processing'
+    })
+
+@app.route('/api/response/<submission_id>', methods=['GET'])
+def api_get_response(submission_id):
+    """API endpoint to check status and get response"""
+    if submission_id in submission_states:
+        submission_state = submission_states[submission_id]
+        
+        # Check if the response is actually complete
+        # The classification_message is set by the department agents (legal_agent, support_agent)
+        # or by classification_agent for unsafe/unknown cases
+        classification_message = submission_state.get('classification_message', '')
+        decision = submission_state.get('decision', '')
+        
+        # Response is ready if:
+        # 1. It's unsafe or unknown (these end at classification_agent)
+        # 2. classification_message has actual content (set by department agents or later stages)
+        is_complete = (
+            decision in ('unsafe', 'unknown') or 
+            (classification_message and len(classification_message) > 0)
+        )
+        
+        if is_complete:
+            return jsonify({
+                'status': 'ready',
+                'input': submission_state.get('input', ''),
+                'classificationMessage': classification_message,
+                'mcpOutput': submission_state.get('mcp_output', ''),
+                'githubIssue': submission_state.get('github_issue', ''),
+                'decision': decision,
+                'ragSources': submission_state.get('rag_sources', [])
+            })
+        else:
+            # State exists but not complete yet
+            return jsonify({
+                'status': 'processing',
+                'message': f'Processing as {decision}...'
+            })
+    else:
+        return jsonify({
+            'status': 'pending',
+            'message': 'Response not ready yet'
+        })
 
 def run_async_task(question, submission_id):
     loop = asyncio.new_event_loop()

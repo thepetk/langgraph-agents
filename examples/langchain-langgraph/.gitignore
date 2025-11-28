@@ -1,0 +1,36 @@
+# RAG file metadata (generated during ingestion)
+rag_file_metadata.json
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+.eggs/
+dist/
+build/
+
+# Virtual environment
+.venv/
+venv/
+ENV/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Environment files
+.env
+.env.local
+
+# Llama Stack local data
+.llama/
+
+# Temporary files
+*.tmp
+*.temp
+

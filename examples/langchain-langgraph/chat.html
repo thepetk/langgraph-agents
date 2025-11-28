@@ -1,0 +1,764 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Developer Portal Assistant</title>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Outfit:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-primary: #0f0f12;
+            --bg-secondary: #1a1a21;
+            --bg-tertiary: #252530;
+            --accent-primary: #6366f1;
+            --accent-secondary: #818cf8;
+            --accent-glow: rgba(99, 102, 241, 0.3);
+            --text-primary: #f1f1f4;
+            --text-secondary: #9d9dab;
+            --text-muted: #6b6b78;
+            --border-color: #2a2a36;
+            --success: #10b981;
+            --warning: #f59e0b;
+            --error: #ef4444;
+            --user-bubble: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+            --assistant-bubble: #1e1e28;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Outfit', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        /* Header */
+        .header {
+            background: var(--bg-secondary);
+            border-bottom: 1px solid var(--border-color);
+            padding: 16px 24px;
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            flex-shrink: 0;
+        }
+
+        .header-icon {
+            width: 42px;
+            height: 42px;
+            background: var(--user-bubble);
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+            box-shadow: 0 4px 12px var(--accent-glow);
+        }
+
+        .header-info h1 {
+            font-size: 18px;
+            font-weight: 600;
+            letter-spacing: -0.02em;
+        }
+
+        .header-info p {
+            font-size: 13px;
+            color: var(--text-secondary);
+            margin-top: 2px;
+        }
+
+        .status-indicator {
+            margin-left: auto;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 13px;
+            color: var(--text-secondary);
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            background: var(--success);
+            border-radius: 50%;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        /* Chat Container */
+        .chat-container {
+            flex: 1;
+            overflow-y: auto;
+            padding: 24px;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            scroll-behavior: smooth;
+        }
+
+        .chat-container::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .chat-container::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        .chat-container::-webkit-scrollbar-thumb {
+            background: var(--border-color);
+            border-radius: 3px;
+        }
+
+        /* Messages */
+        .message {
+            display: flex;
+            gap: 12px;
+            max-width: 85%;
+            animation: fadeIn 0.3s ease-out;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .message.user {
+            align-self: flex-end;
+            flex-direction: row-reverse;
+        }
+
+        .message.assistant {
+            align-self: flex-start;
+        }
+
+        .message-avatar {
+            width: 36px;
+            height: 36px;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 16px;
+            flex-shrink: 0;
+        }
+
+        .message.user .message-avatar {
+            background: var(--user-bubble);
+        }
+
+        .message.assistant .message-avatar {
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+        }
+
+        .message-content {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .message-bubble {
+            padding: 14px 18px;
+            border-radius: 16px;
+            line-height: 1.6;
+            font-size: 14.5px;
+        }
+
+        .message.user .message-bubble {
+            background: var(--user-bubble);
+            border-bottom-right-radius: 4px;
+        }
+
+        .message.assistant .message-bubble {
+            background: var(--assistant-bubble);
+            border: 1px solid var(--border-color);
+            border-bottom-left-radius: 4px;
+        }
+
+        .message-meta {
+            font-size: 11px;
+            color: var(--text-muted);
+            padding: 0 4px;
+        }
+
+        .message.user .message-meta {
+            text-align: right;
+        }
+
+        /* Typing Indicator */
+        .typing-indicator {
+            display: flex;
+            gap: 4px;
+            padding: 14px 18px;
+            background: var(--assistant-bubble);
+            border: 1px solid var(--border-color);
+            border-radius: 16px;
+            border-bottom-left-radius: 4px;
+            width: fit-content;
+        }
+
+        .typing-indicator span {
+            width: 8px;
+            height: 8px;
+            background: var(--text-secondary);
+            border-radius: 50%;
+            animation: bounce 1.4s infinite ease-in-out;
+        }
+
+        .typing-indicator span:nth-child(1) { animation-delay: -0.32s; }
+        .typing-indicator span:nth-child(2) { animation-delay: -0.16s; }
+
+        @keyframes bounce {
+            0%, 80%, 100% { transform: scale(0.8); opacity: 0.5; }
+            40% { transform: scale(1); opacity: 1; }
+        }
+
+        /* Welcome Message */
+        .welcome-message {
+            text-align: center;
+            padding: 40px 20px;
+            color: var(--text-secondary);
+        }
+
+        .welcome-icon {
+            font-size: 48px;
+            margin-bottom: 16px;
+        }
+
+        .welcome-message h2 {
+            font-size: 22px;
+            font-weight: 500;
+            color: var(--text-primary);
+            margin-bottom: 8px;
+        }
+
+        .welcome-message p {
+            font-size: 14px;
+            max-width: 400px;
+            margin: 0 auto;
+            line-height: 1.6;
+        }
+
+        .suggestion-chips {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            justify-content: center;
+            margin-top: 24px;
+        }
+
+        .suggestion-chip {
+            padding: 10px 16px;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+            border-radius: 20px;
+            font-size: 13px;
+            color: var(--text-secondary);
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .suggestion-chip:hover {
+            background: var(--accent-primary);
+            border-color: var(--accent-primary);
+            color: white;
+            transform: translateY(-2px);
+        }
+
+        /* Input Area */
+        .input-area {
+            background: var(--bg-secondary);
+            border-top: 1px solid var(--border-color);
+            padding: 20px 24px;
+            flex-shrink: 0;
+        }
+
+        .input-container {
+            display: flex;
+            gap: 12px;
+            max-width: 900px;
+            margin: 0 auto;
+        }
+
+        .input-wrapper {
+            flex: 1;
+            position: relative;
+        }
+
+        #message-input {
+            width: 100%;
+            padding: 14px 20px;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+            border-radius: 14px;
+            color: var(--text-primary);
+            font-family: inherit;
+            font-size: 15px;
+            outline: none;
+            transition: all 0.2s;
+            resize: none;
+            min-height: 52px;
+            max-height: 150px;
+        }
+
+        #message-input:focus {
+            border-color: var(--accent-primary);
+            box-shadow: 0 0 0 3px var(--accent-glow);
+        }
+
+        #message-input::placeholder {
+            color: var(--text-muted);
+        }
+
+        #send-button {
+            width: 52px;
+            height: 52px;
+            background: var(--user-bubble);
+            border: none;
+            border-radius: 14px;
+            color: white;
+            font-size: 20px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s;
+            flex-shrink: 0;
+        }
+
+        #send-button:hover:not(:disabled) {
+            transform: scale(1.05);
+            box-shadow: 0 4px 16px var(--accent-glow);
+        }
+
+        #send-button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        /* Classification Badge */
+        .classification-badge {
+            display: inline-block;
+            padding: 4px 10px;
+            border-radius: 6px;
+            font-size: 11px;
+            font-weight: 500;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin-bottom: 8px;
+        }
+
+        .classification-badge.legal {
+            background: rgba(99, 102, 241, 0.2);
+            color: var(--accent-secondary);
+        }
+
+        .classification-badge.support {
+            background: rgba(16, 185, 129, 0.2);
+            color: var(--success);
+        }
+
+        .classification-badge.unknown {
+            background: rgba(245, 158, 11, 0.2);
+            color: var(--warning);
+        }
+
+        /* Code blocks in responses */
+        .message-bubble pre {
+            background: var(--bg-primary);
+            padding: 12px;
+            border-radius: 8px;
+            overflow-x: auto;
+            margin: 8px 0;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 13px;
+        }
+
+        .message-bubble code {
+            font-family: 'JetBrains Mono', monospace;
+            background: var(--bg-primary);
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 13px;
+        }
+
+        /* GitHub Issue Link */
+        .github-link {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 8px 12px;
+            background: var(--bg-primary);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            color: var(--accent-secondary);
+            text-decoration: none;
+            font-size: 13px;
+            margin-top: 8px;
+            transition: all 0.2s;
+        }
+
+        .github-link:hover {
+            background: var(--accent-primary);
+            border-color: var(--accent-primary);
+            color: white;
+        }
+
+        /* RAG Sources Section */
+        .sources-section {
+            margin-top: 16px;
+            padding-top: 12px;
+            border-top: 1px solid var(--border-color);
+        }
+
+        .sources-header {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 12px;
+            color: var(--text-muted);
+            margin-bottom: 8px;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .sources-list {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .source-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 12px;
+            background: var(--bg-primary);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            text-decoration: none;
+            color: var(--text-secondary);
+            font-size: 13px;
+            transition: all 0.2s;
+        }
+
+        .source-item:hover {
+            background: var(--bg-tertiary);
+            border-color: var(--accent-primary);
+            color: var(--text-primary);
+        }
+
+        .source-icon {
+            font-size: 16px;
+            flex-shrink: 0;
+        }
+
+        .source-name {
+            flex: 1;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .source-arrow {
+            color: var(--text-muted);
+            font-size: 12px;
+        }
+
+        /* Responsive */
+        @media (max-width: 640px) {
+            .message {
+                max-width: 95%;
+            }
+            
+            .header {
+                padding: 14px 16px;
+            }
+            
+            .input-area {
+                padding: 16px;
+            }
+            
+            .suggestion-chips {
+                flex-direction: column;
+                align-items: center;
+            }
+        }
+    </style>
+</head>
+<body>
+    <header class="header">
+        <div class="header-icon">🤖</div>
+        <div class="header-info">
+            <h1>Developer Portal Assistant</h1>
+            <p>AI-powered legal &amp; support help</p>
+        </div>
+        <div class="status-indicator">
+            <span class="status-dot"></span>
+            <span>Online</span>
+        </div>
+    </header>
+
+    <div class="chat-container" id="chat-container">
+        <div class="welcome-message" id="welcome">
+            <div class="welcome-icon">👋</div>
+            <h2>Welcome to the Developer Portal</h2>
+            <p>I can help you with legal questions, software support, and OpenShift/Kubernetes assistance. What can I help you with today?</p>
+            <div class="suggestion-chips">
+                <button class="suggestion-chip" onclick="sendSuggestion('Can you explain the Apache 2.0 license?')">📜 Apache 2.0 License</button>
+                <button class="suggestion-chip" onclick="sendSuggestion('I need support for my application in the openshift-console namespace')">🔧 App Support</button>
+                <button class="suggestion-chip" onclick="sendSuggestion('I need CPU and memory consumption data')">📊 Resource Usage</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="input-area">
+        <div class="input-container">
+            <div class="input-wrapper">
+                <textarea 
+                    id="message-input" 
+                    placeholder="Type your question here..." 
+                    rows="1"
+                    onkeydown="handleKeyDown(event)"
+                ></textarea>
+            </div>
+            <button id="send-button" onclick="sendMessage()">➤</button>
+        </div>
+    </div>
+
+    <script>
+        const chatContainer = document.getElementById('chat-container');
+        const messageInput = document.getElementById('message-input');
+        const sendButton = document.getElementById('send-button');
+        const welcome = document.getElementById('welcome');
+        
+        let isProcessing = false;
+
+        // Auto-resize textarea
+        messageInput.addEventListener('input', function() {
+            this.style.height = 'auto';
+            this.style.height = Math.min(this.scrollHeight, 150) + 'px';
+        });
+
+        function handleKeyDown(event) {
+            if (event.key === 'Enter' && !event.shiftKey) {
+                event.preventDefault();
+                sendMessage();
+            }
+        }
+
+        function sendSuggestion(text) {
+            messageInput.value = text;
+            sendMessage();
+        }
+
+        function formatTime() {
+            return new Date().toLocaleTimeString('en-US', { 
+                hour: 'numeric', 
+                minute: '2-digit',
+                hour12: true 
+            });
+        }
+
+        function addMessage(content, isUser, meta = {}) {
+            // Hide welcome message on first message
+            if (welcome) {
+                welcome.style.display = 'none';
+            }
+
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${isUser ? 'user' : 'assistant'}`;
+            
+            let badgeHtml = '';
+            if (meta.classification) {
+                badgeHtml = `<span class="classification-badge ${meta.classification}">${meta.classification}</span>`;
+            }
+
+            let githubHtml = '';
+            if (meta.githubIssue) {
+                githubHtml = `<a href="${meta.githubIssue}" target="_blank" class="github-link">🔗 GitHub Issue Created</a>`;
+            }
+
+            let sourcesHtml = '';
+            if (meta.ragSources && meta.ragSources.length > 0) {
+                const sourceItems = meta.ragSources.map(source => {
+                    const url = source.url || '#';
+                    const filename = source.filename || 'Document';
+                    const icon = filename.toLowerCase().endsWith('.pdf') ? '📄' : '📁';
+                    
+                    if (url && url !== '#') {
+                        return `<a href="${url}" target="_blank" class="source-item">
+                            <span class="source-icon">${icon}</span>
+                            <span class="source-name">${filename}</span>
+                            <span class="source-arrow">↗</span>
+                        </a>`;
+                    } else {
+                        return `<div class="source-item">
+                            <span class="source-icon">${icon}</span>
+                            <span class="source-name">${filename}</span>
+                        </div>`;
+                    }
+                }).join('');
+                
+                sourcesHtml = `
+                    <div class="sources-section">
+                        <div class="sources-header">
+                            <span>📚</span>
+                            <span>Sources (${meta.ragSources.length})</span>
+                        </div>
+                        <div class="sources-list">
+                            ${sourceItems}
+                        </div>
+                    </div>
+                `;
+            }
+
+            messageDiv.innerHTML = `
+                <div class="message-avatar">${isUser ? '👤' : '🤖'}</div>
+                <div class="message-content">
+                    <div class="message-bubble">
+                        ${badgeHtml}
+                        ${formatContent(content)}
+                        ${githubHtml}
+                        ${sourcesHtml}
+                    </div>
+                    <div class="message-meta">${formatTime()}</div>
+                </div>
+            `;
+            
+            chatContainer.appendChild(messageDiv);
+            scrollToBottom();
+        }
+
+        function formatContent(text) {
+            // Basic markdown-like formatting
+            return text
+                .replace(/\n/g, '<br>')
+                .replace(/`([^`]+)`/g, '<code>$1</code>');
+        }
+
+        function addTypingIndicator() {
+            const typingDiv = document.createElement('div');
+            typingDiv.className = 'message assistant';
+            typingDiv.id = 'typing-indicator';
+            typingDiv.innerHTML = `
+                <div class="message-avatar">🤖</div>
+                <div class="message-content">
+                    <div class="typing-indicator">
+                        <span></span>
+                        <span></span>
+                        <span></span>
+                    </div>
+                </div>
+            `;
+            chatContainer.appendChild(typingDiv);
+            scrollToBottom();
+        }
+
+        function removeTypingIndicator() {
+            const typing = document.getElementById('typing-indicator');
+            if (typing) {
+                typing.remove();
+            }
+        }
+
+        function scrollToBottom() {
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+        }
+
+        async function sendMessage() {
+            const message = messageInput.value.trim();
+            if (!message || isProcessing) return;
+
+            isProcessing = true;
+            sendButton.disabled = true;
+
+            // Add user message
+            addMessage(message, true);
+            messageInput.value = '';
+            messageInput.style.height = 'auto';
+
+            // Show typing indicator
+            addTypingIndicator();
+
+            try {
+                // Submit question
+                const formData = new FormData();
+                formData.append('question', message);
+
+                const submitResponse = await fetch('/api/submit', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const submitData = await submitResponse.json();
+                const submissionId = submitData.submissionId;
+
+                // Poll for response
+                await pollForResponse(submissionId);
+
+            } catch (error) {
+                removeTypingIndicator();
+                addMessage('Sorry, there was an error processing your request. Please try again.', false);
+                console.error('Error:', error);
+            }
+
+            isProcessing = false;
+            sendButton.disabled = false;
+            messageInput.focus();
+        }
+
+        async function pollForResponse(submissionId, maxAttempts = 120) {
+            for (let i = 0; i < maxAttempts; i++) {
+                try {
+                    const response = await fetch(`/api/response/${submissionId}`);
+                    const data = await response.json();
+
+                    if (data.status === 'ready') {
+                        removeTypingIndicator();
+                        
+                        // Use the decision field for classification badge
+                        let classification = data.decision || 'unknown';
+                        // Normalize classification names
+                        if (classification === 'legal') classification = 'legal';
+                        else if (['support', 'pod', 'perf', 'git'].includes(classification)) classification = 'support';
+                        else classification = 'unknown';
+
+                        addMessage(data.classificationMessage || 'Response received.', false, {
+                            classification: classification,
+                            githubIssue: data.githubIssue,
+                            ragSources: data.ragSources || []
+                        });
+                        return;
+                    }
+
+                    // Still processing - wait before next poll
+                    // Use shorter interval for first few attempts, then slow down
+                    const waitTime = i < 10 ? 500 : 1000;
+                    await new Promise(resolve => setTimeout(resolve, waitTime));
+
+                } catch (error) {
+                    console.error('Polling error:', error);
+                }
+            }
+
+            // Timeout
+            removeTypingIndicator();
+            addMessage('The response is taking longer than expected. Please try again later.', false);
+        }
+    </script>
+</body>
+</html>
+

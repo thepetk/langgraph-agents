@@ -9,6 +9,7 @@ import os
 import json
 
 from llama_stack_client import LlamaStackClient
+from langchain_core.messages import AIMessage
 
 
 # Configure logging
@@ -25,6 +26,7 @@ class State(TypedDict):
     mcp_output: str
     github_issue: str
     submissionID: str
+    rag_sources: list  # List of source documents used in RAG response
 
 # Global dictionary to store state by submission ID
 submission_states: dict[str, State] = {}
@@ -34,18 +36,24 @@ class ClassificationSchema(BaseModel):
     """Analyze the message and route it according to its content."""
 
     classification: Literal["legal", "support", "unsafe", "unknown"] = Field(
-        description="""The classification of the input: 'set to 'legal' if the input is a query related to legal, 'support' if related to software support, or
+        description="""The classification of the input: 'set to 'legal' if the input is a query related to legal, 'support' if related to software or technical support, or
         'unsafe' if the input fails the moderation/safety check, and 'unknown' for everything else.
         Examples of legal questions that can be processed:
         - questions about various software licenses
         - embargoes for certain types of software that prevent delivery to various countries outside the United States
         - privacy, access restrictions, around customer data (sometimes referred to as PII)
-        Examples of support, specifically software support, that can be processed
+        - questions about contracts, policies, procedures, or compliance
+        Examples of support (software support, technical support, IT support) that can be processed:
         - the user cites problems running certain applications of the company's OpenShift Cluster
         - the user asks to have new applications deployed on the company's OpenShift Cluster
         - the user needs permissions to access certain resources on the company's OpenShift Cluster
         - the user asks about current utilization of resources on the company's OpenShift Cluster
         - the user cites issues with performance of their application specifically or the OpenShift Cluster in general
+        - questions about FantaCo products like CloudSync, TechGear Pro Laptop
+        - installation, setup, or configuration questions for software or hardware
+        - troubleshooting issues with devices, drivers, or applications
+        - syncing issues, file transfer problems, or connectivity questions
+        - any technical how-to questions about products or systems
         """,
     )
 
@@ -308,13 +316,44 @@ def perf_agent(state: State):
     return state
 
 from typing import Optional, Mapping, Any
+
+
+def extract_rag_response_text(rag_response) -> str:
+    """Extract text content from RAG response output."""
+    response_text = ""
+    for output_item in rag_response.output:
+        if hasattr(output_item, 'type'):
+            if output_item.type in ("text", "message"):
+                if hasattr(output_item, 'content') and isinstance(output_item.content, list):
+                    for content in output_item.content:
+                        if hasattr(content, 'text'):
+                            response_text += content.text + "\n"
+                elif hasattr(output_item, 'text'):
+                    response_text += output_item.text + "\n"
+            elif output_item.type == "file_search_call":
+                logger.info(f"RAG file_search executed with queries: {getattr(output_item, 'queries', [])}")
+    return response_text.strip()
+
+
 def create_department_agent(
         department_name: str,
         department_display_name: str,
         content_override: Optional[str] = None,
         custom_llm = None,
-        submission_states: Mapping[str, "State"] | dict | None = None):
-    """Factory function to create department-specific agents with consistent structure."""
+        submission_states: Mapping[str, "State"] | dict | None = None,
+        rag_service = None,
+        rag_category: Optional[str] = None):
+    """Factory function to create department-specific agents with consistent structure.
+    
+    Args:
+        department_name: Internal name for the department (e.g., 'legal', 'support')
+        department_display_name: Display name (e.g., 'Legal', 'Software Support')
+        content_override: Optional content to override default prompt
+        custom_llm: LangChain LLM instance for standard inference
+        submission_states: Dictionary to store submission states
+        rag_service: Optional RAGService instance for RAG-enabled responses
+        rag_category: Category name to select appropriate vector stores (e.g., 'legal', 'support')
+    """
 
     # Use custom_llm if provided, otherwise default to topic_llm
     if custom_llm is None:
@@ -324,11 +363,75 @@ def create_department_agent(
         raise ValueError("submission_states is required")
 
     def llm_node(state: State):
-        logger.info(f"{department_display_name} LLM node '{state}'")
-        message = llm_to_use.invoke(state["messages"])
+        logger.info(f"{department_display_name} LLM node processing")
+        
+        # Check if RAG is available for this department
+        use_rag = (rag_service is not None and 
+                   rag_category is not None and 
+                   hasattr(rag_service, 'get_file_search_tool'))
+        
+        file_search_tool = None
+        if use_rag:
+            file_search_tool = rag_service.get_file_search_tool(rag_category)
+            if file_search_tool:
+                logger.info(f"{department_display_name}: RAG enabled with category '{rag_category}'")
+            else:
+                logger.info(f"{department_display_name}: No vector stores for '{rag_category}', using standard LLM")
+                use_rag = False
+        
+        if use_rag and file_search_tool:
+            # Use RAG with file_search tool via OpenAI responses API
+            # This uses the same openaiClient.responses.create() pattern as MCP tool calls
+            try:
+                # Build the user query from state
+                user_input = state.get("input", "")
+                
+                # Create RAG-augmented prompt
+                rag_prompt = f"""Based on the relevant documents in the knowledge base, please help with the following {department_display_name.lower()} query:
+
+{user_input}
+
+Please provide a helpful response based on the documents found. If no relevant documents are found, provide general guidance."""
+
+                logger.info(f"{department_display_name}: Making RAG-enabled response call")
+                rag_response = openaiClient.responses.create(
+                    model=INFERENCE_MODEL,
+                    input=rag_prompt,
+                    tools=[file_search_tool]
+                )
+                
+                # Extract response text
+                response_text = extract_rag_response_text(rag_response)
+                
+                # Extract source documents from RAG response
+                if hasattr(rag_service, 'extract_sources_from_response'):
+                    sources = rag_service.extract_sources_from_response(rag_response, rag_category)
+                    state['rag_sources'] = sources
+                    if sources:
+                        logger.info(f"{department_display_name}: Found {len(sources)} source documents")
+                
+                if response_text:
+                    # Use LangChain's AIMessage for compatibility with LangGraph's add_messages
+                    message = AIMessage(content=response_text)
+                    cm = response_text
+                    logger.info(f"{department_display_name}: RAG response successful")
+                else:
+                    # Fallback to regular LLM if RAG didn't produce text
+                    logger.warning(f"{department_display_name}: RAG response empty, falling back to standard LLM")
+                    message = llm_to_use.invoke(state["messages"])
+                    cm = getattr(message, "content", getattr(message, "text", str(message)))
+                    
+            except Exception as e:
+                logger.error(f"{department_display_name}: RAG call failed: {e}, falling back to standard LLM")
+                message = llm_to_use.invoke(state["messages"])
+                cm = getattr(message, "content", getattr(message, "text", str(message)))
+        else:
+            # Standard LLM call without RAG
+            message = llm_to_use.invoke(state["messages"])
+            cm = getattr(message, "content", getattr(message, "text", str(message)))
+        
         state["messages"] = message
         sub_id = state["submissionID"]
-        cm = getattr(message, "content", getattr(message, "text", str(message)))
         state['classification_message'] = cm
         submission_states[sub_id] = state
         return state
@@ -355,11 +458,24 @@ def create_department_agent(
     return agent_workflow
 
 
-def make_workflow(topic_llm, openai_client, guardrail_model, mcp_tool_model, git_token, github_url, github_id):
-    """Create and configure the overall workflow with all agents and routing."""
+def make_workflow(topic_llm, openai_client, guardrail_model, mcp_tool_model, git_token, github_url, github_id, 
+                  rag_service=None, inference_model=None):
+    """Create and configure the overall workflow with all agents and routing.
+    
+    Args:
+        topic_llm: LangChain LLM instance for classification and general inference
+        openai_client: OpenAI SDK client for responses API (MCP tools, RAG file_search)
+        guardrail_model: Model ID for content moderation
+        mcp_tool_model: Model ID for MCP tool calls
+        git_token: GitHub personal access token
+        github_url: GitHub repository URL for issue creation
+        github_id: GitHub user ID for issue assignment
+        rag_service: Optional RAGService instance for RAG-enabled responses
+        inference_model: Model ID for inference (used in RAG calls)
+    """
 
     # Set global variables needed by the agents
-    global llm, openaiClient, GUARDRAIL_MODEL, MCP_TOOL_MODEL, GIT_TOKEN, GITHUB_URL, GITHUB_ID
+    global llm, openaiClient, GUARDRAIL_MODEL, MCP_TOOL_MODEL, GIT_TOKEN, GITHUB_URL, GITHUB_ID, INFERENCE_MODEL
     llm = topic_llm
     openaiClient = openai_client
     GUARDRAIL_MODEL = guardrail_model
@@ -367,10 +483,26 @@ def make_workflow(topic_llm, openai_client, guardrail_model, mcp_tool_model, git
     GIT_TOKEN = git_token
     GITHUB_URL = github_url
     GITHUB_ID = github_id
+    INFERENCE_MODEL = inference_model or os.getenv("INFERENCE_MODEL", "ollama/llama3.2:3b")
 
     # Create all department agents using the factory function
-    legal_agent = create_department_agent("legal", "Legal", custom_llm=topic_llm, submission_states=submission_states)
-    support_agent = create_department_agent("support", "Software Support", custom_llm=topic_llm, submission_states=submission_states)
+    # RAG is enabled for legal and support agents using their respective vector stores
+    legal_agent = create_department_agent(
+        "legal", 
+        "Legal", 
+        custom_llm=topic_llm, 
+        submission_states=submission_states,
+        rag_service=rag_service,
+        rag_category="legal"  # Maps to legal-vector-db from ingestion-config.yaml
+    )
+    support_agent = create_department_agent(
+        "support", 
+        "Software Support", 
+        custom_llm=topic_llm, 
+        submission_states=submission_states,
+        rag_service=rag_service,
+        rag_category="support"  # Maps to techsupport-vector-db from ingestion-config.yaml
+    )
 
     # Create the overall workflow
     overall_workflow = StateGraph(State)
