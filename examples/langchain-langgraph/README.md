@@ -71,7 +71,7 @@ source .venv/bin/activate
 We have provided a custom run.yaml file to specify the required providers. Use the following command to run the Llama Stack with the custom configuration file.
 
 ```
-uv run llama stack run run.yaml --image-type venv
+uv run llama stack run run.yaml
 ```
 
 ### Launch Kubernetes MCP Server
