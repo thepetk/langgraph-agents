@@ -1,3 +1,4 @@
+from datetime import datetime
 import logging
 from typing import TypedDict, Annotated
 from langgraph.graph import StateGraph, START
@@ -207,7 +208,9 @@ def git_agent(state: State):
     user_question = state['input']
     initial_classification = state.get('mcp_output', '')
     try:
-        logger.info("git_agent GIT calling response api")
+        current = datetime.now()
+        formatted_datetime_string = current.strftime("%Y-%m-%d %H:%M:%S")
+        logger.info(f"git_agent GIT calling response api {formatted_datetime_string}")
         resp = openaiClient.responses.create(
             model=MCP_TOOL_MODEL,
             input=f"""
@@ -221,7 +224,9 @@ def git_agent(state: State):
                 """,
             tools=[openai_mcp_tool]
         )
-        logger.info("git_agent response returned")
+        current = datetime.now()
+        formatted_datetime_string = current.strftime("%Y-%m-%d %H:%M:%S")
+        logger.info(f"git_agent response returned {formatted_datetime_string}")
         mcp_output = None
         # can we assume that the 'McpCall' entry in resp.output is always at index 1 ? ... seem fragile, but by
         # comparison this check
@@ -263,13 +268,17 @@ def pod_agent(state: State):
     }
     ns = state['namespace']
     try:
-        logger.info(f"K8S Agent making MCP request for submission: {state['submissionID']}")
+        current = datetime.now()
+        formatted_datetime_string = current.strftime("%Y-%m-%d %H:%M:%S")
+        logger.info(f"K8S Agent making MCP request for submission: {state['submissionID']} at time {formatted_datetime_string}")
         resp = openaiClient.responses.create(
             model=MCP_TOOL_MODEL,
             input=f"Using the supplied kubernetes tool, list all the pods in the '{ns}' namespace.  Only use the namespace as a parameter and don't bother further filtering on labels.   The `labelSelector` parameter is in fact NOT required.",
             tools=[openai_mcp_tool]
         )
-        logger.info(f"K8S Agent successful return MCP request for submission: {state['submissionID']}")
+        current = datetime.now()
+        formatted_datetime_string = current.strftime("%Y-%m-%d %H:%M:%S")
+        logger.info(f"K8S Agent successful return MCP request for submission: {state['submissionID']} at time {formatted_datetime_string}")
         mcp_output = None
         # can we assume that the 'McpCall' entry in resp.output is always at index 1 ? ... seem fragile, but by
         # comparison this check
