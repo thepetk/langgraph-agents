@@ -27,6 +27,7 @@ class State(TypedDict):
     github_issue: str
     submissionID: str
     rag_sources: list  # List of source documents used in RAG response
+    workflow_complete: bool  # True when entire workflow has finished
 
 # Global dictionary to store state by submission ID
 submission_states: dict[str, State] = {}
@@ -85,6 +86,7 @@ def classification_agent(state: State):
             state['data'] =  state['input']
             flagged_categories = [key for key, value in moderation.categories.model_extra.items() if value is True]
             state['classification_message'] =  f"Classification result: '{state['input']}' is flagged for: {', '.join(flagged_categories)}"
+            state['workflow_complete'] = True  # Terminal state - workflow ends here
             submission_states[state['submissionID']] = state
             return state
 
@@ -107,6 +109,7 @@ def classification_agent(state: State):
         state['decision'] = 'unknown'
         state['data'] = state['input']
         state['classification_message'] = "Unable to determine request type."
+        state['workflow_complete'] = True  # Terminal state - workflow ends here
 
     sub_id = state['submissionID']
     submission_states[sub_id] = state
@@ -238,9 +241,12 @@ def git_agent(state: State):
             else:
                 print(item)
         state['github_issue'] = mcp_output
+        state['workflow_complete'] = True  # Terminal state - workflow ends here
         submission_states[subId] = state
     except Exception as e:
         logger.info(f"git_agent Tool failed with error: '{e}'")
+        state['workflow_complete'] = True  # Still mark complete even on error
+        submission_states[subId] = state
     return state
 
 def pod_agent(state: State):
@@ -342,7 +348,8 @@ def create_department_agent(
         custom_llm = None,
         submission_states: Mapping[str, "State"] | dict | None = None,
         rag_service = None,
-        rag_category: Optional[str] = None):
+        rag_category: Optional[str] = None,
+        is_terminal: bool = False):
     """Factory function to create department-specific agents with consistent structure.
     
     Args:
@@ -353,6 +360,7 @@ def create_department_agent(
         submission_states: Dictionary to store submission states
         rag_service: Optional RAGService instance for RAG-enabled responses
         rag_category: Category name to select appropriate vector stores (e.g., 'legal', 'support')
+        is_terminal: If True, marks workflow_complete when this agent finishes
     """
 
     # Use custom_llm if provided, otherwise default to topic_llm
@@ -433,6 +441,11 @@ Please provide a helpful response based on the documents found. If no relevant d
         state["messages"] = message
         sub_id = state["submissionID"]
         state['classification_message'] = cm
+        
+        # Mark workflow complete if this is a terminal node
+        if is_terminal:
+            state['workflow_complete'] = True
+        
         submission_states[sub_id] = state
         return state
 
@@ -493,7 +506,8 @@ def make_workflow(topic_llm, openai_client, guardrail_model, mcp_tool_model, git
         custom_llm=topic_llm, 
         submission_states=submission_states,
         rag_service=rag_service,
-        rag_category="legal"  # Maps to legal-vector-db from ingestion-config.yaml
+        rag_category="legal",  # Maps to legal-vector-db from ingestion-config.yaml
+        is_terminal=True  # legal_agent is terminal - workflow ends after it
     )
     support_agent = create_department_agent(
         "support", 
@@ -501,7 +515,8 @@ def make_workflow(topic_llm, openai_client, guardrail_model, mcp_tool_model, git
         custom_llm=topic_llm, 
         submission_states=submission_states,
         rag_service=rag_service,
-        rag_category="support"  # Maps to techsupport-vector-db from ingestion-config.yaml
+        rag_category="support",  # Maps to techsupport-vector-db from ingestion-config.yaml
+        is_terminal=False  # support continues to support_classification_agent
     )
 
     # Create the overall workflow

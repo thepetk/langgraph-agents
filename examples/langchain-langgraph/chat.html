@@ -375,6 +375,11 @@
             color: var(--warning);
         }
 
+        .classification-badge.error {
+            background: rgba(239, 68, 68, 0.2);
+            color: var(--error);
+        }
+
         /* Code blocks in responses */
         .message-bubble pre {
             background: var(--bg-primary);
@@ -475,6 +480,35 @@
         .source-arrow {
             color: var(--text-muted);
             font-size: 12px;
+        }
+
+        /* MCP Output Section */
+        .mcp-output-section {
+            margin-top: 12px;
+            padding: 12px;
+            background: var(--bg-primary);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+        }
+
+        .mcp-output-header {
+            font-size: 12px;
+            color: var(--text-muted);
+            margin-bottom: 8px;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .mcp-output-content {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 12px;
+            color: var(--text-secondary);
+            overflow-x: auto;
+            white-space: pre-wrap;
+            word-break: break-word;
+            margin: 0;
+            max-height: 200px;
+            overflow-y: auto;
         }
 
         /* Responsive */
@@ -588,7 +622,25 @@
 
             let githubHtml = '';
             if (meta.githubIssue) {
-                githubHtml = `<a href="${meta.githubIssue}" target="_blank" class="github-link">🔗 GitHub Issue Created</a>`;
+                githubHtml = `<a href="${meta.githubIssue}" target="_blank" class="github-link">🎫 GitHub Issue Created</a>`;
+            }
+
+            let mcpOutputHtml = '';
+            if (meta.mcpOutput) {
+                // Format MCP output (could be JSON or text)
+                let formattedOutput = meta.mcpOutput;
+                try {
+                    const parsed = JSON.parse(meta.mcpOutput);
+                    formattedOutput = JSON.stringify(parsed, null, 2);
+                } catch (e) {
+                    // Not JSON, use as-is
+                }
+                mcpOutputHtml = `
+                    <div class="mcp-output-section">
+                        <div class="mcp-output-header">📋 Diagnostics Output</div>
+                        <pre class="mcp-output-content">${formattedOutput}</pre>
+                    </div>
+                `;
             }
 
             let sourcesHtml = '';
@@ -631,6 +683,7 @@
                     <div class="message-bubble">
                         ${badgeHtml}
                         ${formatContent(content)}
+                        ${mcpOutputHtml}
                         ${githubHtml}
                         ${sourcesHtml}
                     </div>
@@ -734,11 +787,13 @@
                         // Normalize classification names
                         if (classification === 'legal') classification = 'legal';
                         else if (['support', 'pod', 'perf', 'git'].includes(classification)) classification = 'support';
+                        else if (classification === 'error') classification = 'error';
                         else classification = 'unknown';
 
                         addMessage(data.classificationMessage || 'Response received.', false, {
                             classification: classification,
                             githubIssue: data.githubIssue,
+                            mcpOutput: data.mcpOutput,
                             ragSources: data.ragSources || []
                         });
                         return;
