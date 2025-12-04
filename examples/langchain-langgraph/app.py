@@ -104,35 +104,26 @@ def api_get_response(submission_id):
     if submission_id in submission_states:
         submission_state = submission_states[submission_id]
         
-        # Check if the response is actually complete
-        # The classification_message is set by the department agents (legal_agent, support_agent)
-        # or by classification_agent for unsafe/unknown cases
-        classification_message = submission_state.get('classification_message', '')
+        # Check if the workflow has fully completed
+        # workflow_complete is set by terminal nodes (legal_agent, git_agent, or classification_agent for unsafe/unknown)
+        is_complete = submission_state.get('workflow_complete', False)
         decision = submission_state.get('decision', '')
-        
-        # Response is ready if:
-        # 1. It's unsafe or unknown (these end at classification_agent)
-        # 2. classification_message has actual content (set by department agents or later stages)
-        is_complete = (
-            decision in ('unsafe', 'unknown') or 
-            (classification_message and len(classification_message) > 0)
-        )
         
         if is_complete:
             return jsonify({
                 'status': 'ready',
                 'input': submission_state.get('input', ''),
-                'classificationMessage': classification_message,
+                'classificationMessage': submission_state.get('classification_message', ''),
                 'mcpOutput': submission_state.get('mcp_output', ''),
                 'githubIssue': submission_state.get('github_issue', ''),
                 'decision': decision,
                 'ragSources': submission_state.get('rag_sources', [])
             })
         else:
-            # State exists but not complete yet
+            # State exists but workflow not complete yet
             return jsonify({
                 'status': 'processing',
-                'message': f'Processing as {decision}...'
+                'message': f'Processing as {decision}...' if decision else 'Classifying...'
             })
     else:
         return jsonify({
@@ -143,8 +134,23 @@ def api_get_response(submission_id):
 def run_async_task(question, submission_id):
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
-    loop.run_until_complete(invoke_workflow_async(question, submission_id))
-    loop.close()
+    try:
+        loop.run_until_complete(invoke_workflow_async(question, submission_id))
+    except Exception as e:
+        # On error, save error state so frontend doesn't hang
+        logger.error(f"Workflow failed for submission {submission_id}: {e}")
+        submission_states[submission_id] = {
+            'input': question,
+            'submissionID': submission_id,
+            'decision': 'error',
+            'classification_message': f"Sorry, an error occurred while processing your request. Please try again.\n\nError: {str(e)[:200]}",
+            'workflow_complete': True,
+            'mcp_output': '',
+            'github_issue': '',
+            'rag_sources': []
+        }
+    finally:
+        loop.close()
 
 @app.route('/submit-question', methods=['POST'])
 def submit_question():
