@@ -11,6 +11,7 @@ import yaml
 import logging
 from typing import Dict, List, Optional, Any
 from llama_stack_client import LlamaStackClient
+from ingest_openai import IngestionService
 
 logger = logging.getLogger(__name__)
 
@@ -119,10 +120,20 @@ class RAGService:
         """Load vector stores from Llama Stack and map them by category."""
         try:
             vector_stores = self.client.vector_stores.list() or []
-            
-            if not vector_stores:
-                logger.warning("RAG Service: No vector stores found")
-                return False
+            vector_store_list = list(vector_stores)
+
+            if not vector_stores or len(vector_store_list) == 0:
+                logger.warning("RAG Service: No vector stores found, attempting to ingest")
+                config_file = os.getenv("INGESTION_CONFIG", "./ingestion-config.yaml")
+                if not os.path.exists(config_file):
+                    logger.error(f"Configuration file not found: {config_file}")
+                    return False
+                service = IngestionService(config_file)
+                service.run()
+                vector_stores = self.client.vector_stores.list() or []
+                if not vector_stores:
+                    logger.warning("RAG Service: No vector stores found even after ingest attempt")
+                    return False
 
             # Map vector stores by name/category
             self.all_vector_store_ids = [vs.id for vs in vector_stores]
